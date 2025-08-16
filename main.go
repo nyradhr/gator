@@ -1,15 +1,19 @@
 package main
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
+	_ "github.com/lib/pq"
+
 	"github.com/nyradhr/gator/internal/config"
+	"github.com/nyradhr/gator/internal/database"
 )
 
 type state struct {
+	db     *database.Queries
 	config *config.Config
 }
 
@@ -18,26 +22,31 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading config file: %v", err)
 	}
+	dbURL := cfg.DbUrl
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	dbQueries := database.New(db)
 	s := &state{
+		db:     dbQueries,
 		config: &cfg,
 	}
 	cmds := commands{}
 	cmds.list = make(map[string]func(*state, command) error)
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
 	input := os.Args
 	if len(input) < 2 {
-		log.Fatal("Username required for login")
+		log.Fatal("Usage: cli <command> [args...]")
 	}
 	cmdName := input[1]
 	cmdArgs := input[2:]
-	userCmd := command{name: cmdName, args: cmdArgs}
+	userCmd := command{Name: cmdName, Args: cmdArgs}
 	err = cmds.run(s, userCmd)
 	if err != nil {
-		log.Fatalf("Error during login: %v", err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
-	jsonData, err := json.Marshal(cfg)
-	if err != nil {
-		log.Fatalf("Error marshaling JSON: %v", err)
-	}
-	fmt.Println(string(jsonData))
 }
