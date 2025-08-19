@@ -41,7 +41,7 @@ func handlerLogin(s *state, cmd command) error {
 
 func handlerRegister(s *state, cmd command) error {
 	if len(cmd.Args) != 1 {
-		return fmt.Errorf("name missing")
+		return fmt.Errorf("usage: %s <name>", cmd.Name)
 	}
 	params := database.CreateUserParams{
 		ID:        uuid.New(),
@@ -59,6 +59,18 @@ func handlerRegister(s *state, cmd command) error {
 	}
 	fmt.Println("User has been created")
 	fmt.Printf("User data: %#v", u)
+	return nil
+}
+
+func handlerReset(s *state, cmd command) error {
+	if len(cmd.Args) != 0 {
+		return fmt.Errorf("usage: %s", cmd.Name)
+	}
+	err := s.db.DeleteAllUsers(context.Background())
+	if err != nil {
+		return err
+	}
+	fmt.Println("All users have been deleted")
 	return nil
 }
 
