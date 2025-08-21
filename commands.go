@@ -58,7 +58,7 @@ func handlerRegister(s *state, cmd command) error {
 		return err
 	}
 	fmt.Println("User has been created")
-	fmt.Printf("User data: %#v", u)
+	fmt.Printf("User data: %+v", u)
 	return nil
 }
 
@@ -88,6 +88,63 @@ func handlerUsers(s *state, cmd command) error {
 		} else {
 			fmt.Println(u.Name)
 		}
+	}
+	return nil
+}
+
+func handlerAggregate(s *state, cmd command) error {
+	if len(cmd.Args) != 0 {
+		return fmt.Errorf("usage: %s", cmd.Name)
+	}
+	feedUrl := "https://www.wagslane.dev/index.xml"
+	feed, err := fetchFeed(context.Background(), feedUrl)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%+v", feed)
+	return nil
+}
+
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.Args) != 2 {
+		return fmt.Errorf("usage: %s <name> <url>", cmd.Name)
+	}
+	ctx := context.Background()
+	user, err := s.db.GetUser(ctx, s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+	params := database.CreateFeedParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      cmd.Args[0],
+		Url:       cmd.Args[1],
+		UserID:    user.ID,
+	}
+	feed, err := s.db.CreateFeed(ctx, params)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Feed data: %+v", feed)
+	return nil
+}
+
+func handlerFeeds(s *state, cmd command) error {
+	if len(cmd.Args) != 0 {
+		return fmt.Errorf("usage: %s", cmd.Name)
+	}
+	ctx := context.Background()
+	feeds, err := s.db.GetFeeds(ctx)
+	if err != nil {
+		return err
+	}
+	for _, f := range feeds {
+		user, err := s.db.GetUserById(ctx, f.UserID)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s by %s (%s)\n", f.Name, user.Name, f.Url)
 	}
 	return nil
 }
