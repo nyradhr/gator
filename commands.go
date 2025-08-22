@@ -114,7 +114,7 @@ func handlerAddFeed(s *state, cmd command) error {
 	if err != nil {
 		return err
 	}
-	params := database.CreateFeedParams{
+	feedParams := database.CreateFeedParams{
 		ID:        uuid.New(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -122,7 +122,18 @@ func handlerAddFeed(s *state, cmd command) error {
 		Url:       cmd.Args[1],
 		UserID:    user.ID,
 	}
-	feed, err := s.db.CreateFeed(ctx, params)
+	feed, err := s.db.CreateFeed(ctx, feedParams)
+	if err != nil {
+		return err
+	}
+	followParams := database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		FeedID:    feed.ID,
+		UserID:    user.ID,
+	}
+	_, err = s.db.CreateFeedFollow(ctx, followParams)
 	if err != nil {
 		return err
 	}
@@ -145,6 +156,54 @@ func handlerFeeds(s *state, cmd command) error {
 			return err
 		}
 		fmt.Printf("%s by %s (%s)\n", f.Name, user.Name, f.Url)
+	}
+	return nil
+}
+
+func handlerFollow(s *state, cmd command) error {
+	if len(cmd.Args) != 1 {
+		return fmt.Errorf("usage: %s <url>", cmd.Name)
+	}
+	ctx := context.Background()
+	user, err := s.db.GetUser(ctx, s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+	feed, err := s.db.GetFeedByUrl(ctx, cmd.Args[0])
+	if err != nil {
+		return err
+	}
+	params := database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		FeedID:    feed.ID,
+		UserID:    user.ID,
+	}
+	follow, err := s.db.CreateFeedFollow(ctx, params)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Feed name:", follow.FeedName)
+	fmt.Println("Current user name:", follow.UserName)
+	return nil
+}
+
+func handlerFollowing(s *state, cmd command) error {
+	if len(cmd.Args) != 0 {
+		return fmt.Errorf("usage: %s", cmd.Name)
+	}
+	ctx := context.Background()
+	user, err := s.db.GetUser(ctx, s.config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+	follows, err := s.db.GetFeedFollowsForUser(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	for _, f := range follows {
+		fmt.Println(f.FeedName)
 	}
 	return nil
 }
