@@ -20,6 +20,22 @@ type commands struct {
 	list map[string]func(*state, command) error
 }
 
+func (c *commands) run(s *state, cmd command) error {
+	handler := c.list[cmd.Name]
+	if handler == nil {
+		return errors.New("no handler found for given command")
+	}
+	err := handler(s, cmd)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *commands) register(name string, f func(*state, command) error) {
+	c.list[name] = f
+}
+
 func handlerLogin(s *state, cmd command) error {
 	if len(cmd.Args) != 1 {
 		return fmt.Errorf("usage: %s <name>", cmd.Name)
@@ -105,15 +121,11 @@ func handlerAggregate(s *state, cmd command) error {
 	return nil
 }
 
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.Args) != 2 {
 		return fmt.Errorf("usage: %s <name> <url>", cmd.Name)
 	}
 	ctx := context.Background()
-	user, err := s.db.GetUser(ctx, s.config.CurrentUserName)
-	if err != nil {
-		return err
-	}
 	feedParams := database.CreateFeedParams{
 		ID:        uuid.New(),
 		CreatedAt: time.Now(),
@@ -160,15 +172,11 @@ func handlerFeeds(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.Args) != 1 {
 		return fmt.Errorf("usage: %s <url>", cmd.Name)
 	}
 	ctx := context.Background()
-	user, err := s.db.GetUser(ctx, s.config.CurrentUserName)
-	if err != nil {
-		return err
-	}
 	feed, err := s.db.GetFeedByUrl(ctx, cmd.Args[0])
 	if err != nil {
 		return err
@@ -189,15 +197,11 @@ func handlerFollow(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollowing(s *state, cmd command) error {
+func handlerFollowing(s *state, cmd command, user database.User) error {
 	if len(cmd.Args) != 0 {
 		return fmt.Errorf("usage: %s", cmd.Name)
 	}
 	ctx := context.Background()
-	user, err := s.db.GetUser(ctx, s.config.CurrentUserName)
-	if err != nil {
-		return err
-	}
 	follows, err := s.db.GetFeedFollowsForUser(ctx, user.ID)
 	if err != nil {
 		return err
@@ -206,20 +210,4 @@ func handlerFollowing(s *state, cmd command) error {
 		fmt.Println(f.FeedName)
 	}
 	return nil
-}
-
-func (c *commands) run(s *state, cmd command) error {
-	handler := c.list[cmd.Name]
-	if handler == nil {
-		return errors.New("no handler found for given command")
-	}
-	err := handler(s, cmd)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *commands) register(name string, f func(*state, command) error) {
-	c.list[name] = f
 }
