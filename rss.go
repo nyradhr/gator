@@ -2,12 +2,19 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"html"
 	"io"
 	"log"
 	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lib/pq"
+	"github.com/nyradhr/gator/internal/database"
 )
 
 type RSSFeed struct {
@@ -65,7 +72,6 @@ func scrapeFeeds(s *state) {
 		log.Println("Feed to fetch not found:", err)
 		return
 	}
-
 	err = s.db.MarkFeedFetched(ctx, dbFeed.ID)
 	if err != nil {
 		log.Printf("Error while marking feed %s as fetched: %v", dbFeed.Name, err)
@@ -76,9 +82,65 @@ func scrapeFeeds(s *state) {
 		log.Printf("Error while collecting feed %s: %v", dbFeed.Name, err)
 		return
 	}
-	log.Println("Showing posts from", dbFeed.Name)
 	for _, item := range rssFeed.Channel.Item {
-		fmt.Println(item.Title)
+		pubDate, err := parseDate(item.PubDate)
+		if err != nil {
+			log.Printf("Error parsing publishing date for item in feed %s: %v", dbFeed.Name, err)
+			return
+		}
+		params := database.CreatePostParams{
+			ID:          uuid.New(),
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+			Title:       item.Title,
+			Url:         item.Link,
+			Description: toNullString(item.Description),
+			PublishedAt: toNullTime(pubDate),
+			FeedID:      dbFeed.ID,
+		}
+		_, err = s.db.CreatePost(ctx, params)
+		if err != nil {
+			if isUniqueViolation(err) {
+				continue
+			}
+			log.Printf("Error while creating post: %v", err)
+		}
 	}
-	log.Printf("Feed %s collected, %v posts found", dbFeed.Name, len(rssFeed.Channel.Item))
+}
+
+var fmts = []string{
+	time.RFC1123Z, time.RFC1123,
+	time.RFC822Z, time.RFC822,
+	time.RFC3339, "Mon, 02 Jan 2006 15:04:05 MST",
+}
+
+func parseDate(s string) (time.Time, error) {
+	for _, f := range fmts {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Now(), fmt.Errorf("unrecognized date: %q", s)
+}
+
+func toNullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+func isUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return string(pqErr.Code) == "23505"
+	}
+	return false
+}
+
+func toNullTime(t time.Time) sql.NullTime {
+	if t.IsZero() {
+		return sql.NullTime{Valid: false}
+	}
+	return sql.NullTime{Time: t, Valid: true}
 }

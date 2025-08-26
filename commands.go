@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -223,4 +224,36 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 		Url:    cmd.Args[0],
 	}
 	return s.db.DeleteFeedFollow(context.Background(), params)
+}
+
+func handlerBrowse(s *state, cmd command, user database.User) error {
+	limit := 2
+	if len(cmd.Args) == 1 {
+		if specifiedLimit, err := strconv.Atoi(cmd.Args[0]); err == nil {
+			limit = specifiedLimit
+		} else {
+			return fmt.Errorf("invalid limit: %w", err)
+		}
+	}
+	params := database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit:  int32(limit),
+	}
+	posts, err := s.db.GetPostsForUser(context.Background(), params)
+	if err != nil {
+		return err
+	}
+	for _, post := range posts {
+		fmt.Printf("From %s\n", post.FeedName)
+		if post.PublishedAt.Valid {
+			fmt.Println(post.PublishedAt.Time.UTC().Format("02 Jan 06 15:04 MST"))
+		} else {
+			fmt.Println("(no date)")
+		}
+		fmt.Println(post.Title)
+		fmt.Println(post.Description.String)
+		fmt.Println(post.Url)
+		fmt.Println()
+	}
+	return nil
 }
